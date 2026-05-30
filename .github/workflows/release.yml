@@ -1,0 +1,46 @@
+name: release
+
+# Build the macOS app and attach it to a GitHub Release whenever a v* tag is
+# pushed (or run manually). Produces NetForge.app + .dmg (Apple Silicon).
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      - run: npm install
+
+      - name: Build & release (Tauri)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "NetForge ${{ github.ref_name }}"
+          releaseBody: "Автосборка macOS (Apple Silicon). Приложение не подписано — при первом запуске: правый клик → «Открыть»."
+          releaseDraft: false
+          prerelease: false
