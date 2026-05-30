@@ -34,8 +34,16 @@ fn base_args(s: &Settings) -> Vec<String> {
         "StrictHostKeyChecking=accept-new".into(),
     ];
     if !s.key_path.trim().is_empty() {
+        // `ssh` is run without a shell, so expand a leading `~/` ourselves.
+        let kp = s.key_path.trim();
+        let expanded = match kp.strip_prefix("~/") {
+            Some(rest) => std::env::var("HOME")
+                .map(|h| format!("{h}/{rest}"))
+                .unwrap_or_else(|_| kp.to_string()),
+            None => kp.to_string(),
+        };
         a.push("-i".into());
-        a.push(s.key_path.trim().into());
+        a.push(expanded);
     }
     a.push("-p".into());
     a.push(s.ssh_port.to_string());
