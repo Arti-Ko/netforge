@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NetForge</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body>
+    <div class="bg"></div>
+    <div class="bg__grid"></div>
+
+    <main class="app">
+      <header class="head">
+        <div class="brand">
+          <span class="dot"></span>
+          <b>NET<span>FORGE</span></b>
+        </div>
+        <div class="head__right">
+          <span class="pill" id="serverPill">—</span>
+          <button class="icon-btn" id="btnSettings" title="Настройки сервера">⚙</button>
+        </div>
+      </header>
+
+      <section class="glass panel">
+        <div class="panel__head">
+          <span class="label" id="listLabel">Конфиги</span>
+          <button class="btn accent" id="btnCreate">＋ Создать</button>
+        </div>
+        <div class="list" id="list"></div>
+      </section>
+    </main>
+
+    <!-- Create modal -->
+    <div class="modal" id="createModal">
+      <div class="glass modal__card">
+        <div class="modal__title">Новый конфиг</div>
+        <div class="err" id="createErr"></div>
+        <div class="field">
+          <label class="label">Имя</label>
+          <input class="input" id="cName" placeholder="kira" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label class="label">Описание</label>
+          <textarea class="input" id="cDesc" placeholder="например: телефон жены"></textarea>
+        </div>
+        <div class="field">
+          <label class="label">Срок жизни</label>
+          <select class="select" id="cTtl">
+            <option value="0">Бессрочно</option>
+            <option value="1">1 день</option>
+            <option value="7">7 дней</option>
+            <option value="30">30 дней</option>
+            <option value="90">90 дней</option>
+          </select>
+        </div>
+        <div class="modal__actions">
+          <button class="btn" id="cCancel">Отмена</button>
+          <button class="btn accent" id="cSubmit">Создать</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings modal -->
+    <div class="modal" id="settingsModal">
+      <div class="glass modal__card">
+        <div class="modal__title">Сервер (SSH)</div>
+        <div class="err" id="setErr"></div>
+        <div class="field">
+          <label class="label">Хост / IP</label>
+          <input class="input" id="sHost" placeholder="203.0.113.10" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label class="label">SNI / домен (для ссылок)</label>
+          <input class="input" id="sSni" placeholder="vpn.example.com" autocomplete="off" />
+        </div>
+        <div class="field" style="display:flex; gap:10px;">
+          <div style="flex:2"><label class="label">SSH юзер</label><input class="input" id="sUser" placeholder="root" /></div>
+          <div style="flex:1"><label class="label">Порт</label><input class="input" id="sPort" placeholder="22" /></div>
+        </div>
+        <div class="field">
+          <label class="label">Путь к SSH-ключу (опц.)</label>
+          <input class="input" id="sKey" placeholder="~/.ssh/id_ed25519 (пусто = по умолчанию)" autocomplete="off" />
+        </div>
+        <div class="modal__actions">
+          <button class="btn" id="setCancel">Отмена</button>
+          <button class="btn accent" id="setSubmit">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </body>
+</html>
