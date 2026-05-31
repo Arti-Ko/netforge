@@ -9,12 +9,15 @@ fn names(c: &ssh::Hy2Config) -> Vec<String> {
 
 fn main() {
     let home = std::env::var("HOME").unwrap();
+    // Point this at your own server via env vars, e.g.:
+    //   NF_HOST=203.0.113.10 NF_SNI=vpn.example.com cargo run --example verify
+    let env = |k: &str, d: &str| std::env::var(k).unwrap_or_else(|_| d.into());
     let s = Settings {
-        host: "203.0.113.10".into(),
-        ssh_user: "root".into(),
-        ssh_port: 22,
-        sni: "vpn.example.com".into(),
-        key_path: format!("{home}/.ssh/id_ed25519"),
+        host: env("NF_HOST", "203.0.113.10"),
+        ssh_user: env("NF_SSH_USER", "root"),
+        ssh_port: env("NF_SSH_PORT", "22").parse().unwrap_or(22),
+        sni: env("NF_SNI", "vpn.example.com"),
+        key_path: env("NF_KEY", &format!("{home}/.ssh/id_ed25519")),
     };
 
     println!("→ installed: {:?}", ssh::hysteria_installed(&s));
