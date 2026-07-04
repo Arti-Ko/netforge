@@ -1,10 +1,10 @@
 pub mod ssh;
 pub mod store;
 
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use serde::Serialize;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
-
-use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
 use ssh::{Hy2Config, Hy2User};
@@ -56,7 +56,7 @@ fn effective_sni(s: &Settings) -> String {
     }
 }
 
-fn build_link(s: &Settings, cfg: &Hy2Config, u: &Hy2User) -> String {
+fn build_hy2_link(s: &Settings, cfg: &Hy2Config, u: &Hy2User) -> String {
     let mut query = format!("insecure=1&sni={}", effective_sni(s));
     if !cfg.obfs_type.is_empty() {
         query.push_str(&format!(
@@ -68,6 +68,19 @@ fn build_link(s: &Settings, cfg: &Hy2Config, u: &Hy2User) -> String {
         "hysteria2://{}:{}@{}:{}/?{}#{}",
         u.name, u.password, s.host, cfg.port, query, u.name
     )
+}
+
+/// If vless_link is configured, wraps hy2 + vless into a coffee://bundle.
+/// Otherwise returns the plain hysteria2 link.
+fn build_link(s: &Settings, cfg: &Hy2Config, u: &Hy2User) -> String {
+    let hy2 = build_hy2_link(s, cfg, u);
+    let vless = s.vless_link.trim();
+    if vless.is_empty() {
+        return hy2;
+    }
+    let w = URL_SAFE_NO_PAD.encode(hy2.as_bytes());
+    let m = URL_SAFE_NO_PAD.encode(vless.as_bytes());
+    format!("coffee://bundle?w={}&m={}", w, m)
 }
 
 // ── Commands ────────────────────────────────────────────────────────────────

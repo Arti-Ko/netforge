@@ -17,6 +17,10 @@ pub struct Settings {
     pub sni: String,
     /// Optional explicit private key path; empty → use ssh defaults.
     pub key_path: String,
+    /// Optional VLESS Reality link used as the mobile leg of coffee://bundle.
+    /// When set, every generated hysteria2 link is automatically wrapped in a bundle.
+    #[serde(default)]
+    pub vless_link: String,
 }
 
 impl Default for Settings {
@@ -27,6 +31,7 @@ impl Default for Settings {
             ssh_port: 22,
             sni: String::new(),
             key_path: String::new(),
+            vless_link: String::new(),
         }
     }
 }

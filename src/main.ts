@@ -18,6 +18,7 @@ interface Settings {
   ssh_port: number;
   sni: string;
   key_path: string;
+  vless_link: string; // if set, every new config is auto-bundled as coffee://bundle
 }
 interface ConfigEntry {
   name: string;
@@ -42,7 +43,7 @@ interface LoadResult {
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const DAY = 86_400_000;
 
-let settings: Settings = { host: "", ssh_user: "root", ssh_port: 22, sni: "", key_path: "" };
+let settings: Settings = { host: "", ssh_user: "root", ssh_port: 22, sni: "", key_path: "", vless_link: "" };
 let armedDelete: string | null = null;
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
@@ -252,9 +253,15 @@ async function submitCreate() {
   try {
     const entry = await invoke<ConfigEntry>("create_config", { name, description, ttlDays });
     closeModal("createModal");
-    // Open bundle panel pre-filled with the new link so user can add a mobile link
-    openBundlePanel(entry.link);
-    toast(`Создан ${entry.name} — добавь мобильный link и скопируй bundle`);
+    if (entry.link.startsWith("coffee://bundle")) {
+      // vless_link was configured — bundle was auto-generated, just copy it
+      await copy(entry.link);
+      toast(`Создан ${entry.name} — bundle скопирован`);
+    } else {
+      // no vless_link set — open bundle panel so user can add mobile link manually
+      openBundlePanel(entry.link);
+      toast(`Создан ${entry.name} — добавь VLESS link в настройках для авто-bundle`);
+    }
     loadConfigs();
   } catch (e) {
     $("createErr").textContent = String(e);
@@ -271,6 +278,7 @@ function openSettings(forced: boolean) {
   ($("sUser") as HTMLInputElement).value = settings.ssh_user || "root";
   ($("sPort") as HTMLInputElement).value = String(settings.ssh_port || 22);
   ($("sKey") as HTMLInputElement).value = settings.key_path;
+  ($("sVless") as HTMLInputElement).value = settings.vless_link || "";
   openModal("settingsModal");
 }
 
@@ -281,6 +289,7 @@ async function submitSettings() {
     ssh_user: ($("sUser") as HTMLInputElement).value.trim() || "root",
     ssh_port: parseInt(($("sPort") as HTMLInputElement).value, 10) || 22,
     key_path: ($("sKey") as HTMLInputElement).value.trim(),
+    vless_link: ($("sVless") as HTMLInputElement).value.trim(),
   };
   if (!next.host) {
     $("setErr").textContent = "Укажи хост";

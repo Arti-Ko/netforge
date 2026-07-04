@@ -110,6 +110,10 @@
           <label class="label">Путь к SSH-ключу (опц.)</label>
           <input class="input" id="sKey" placeholder="~/.ssh/id_ed25519 (пусто = по умолчанию)" autocomplete="off" />
         </div>
+        <div class="field">
+          <label class="label">VLESS Reality link <span style="color:var(--ink-faint)">(авто-bundle для мобильных)</span></label>
+          <input class="input" id="sVless" placeholder="vless://uuid@host:443?type=tcp&security=reality&pbk=…" spellcheck="false" autocomplete="off" />
+        </div>
         <div class="modal__actions">
           <button class="btn" id="setCancel">Отмена</button>
           <button class="btn accent" id="setSubmit">Сохранить</button>
