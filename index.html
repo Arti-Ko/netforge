@@ -26,11 +26,38 @@
       <section class="glass panel">
         <div class="panel__head">
           <span class="label" id="listLabel">Конфиги</span>
+          <button class="btn" id="btnBundle">⊕ Bundle</button>
           <button class="btn accent" id="btnCreate">＋ Создать</button>
         </div>
         <div class="list" id="list"></div>
       </section>
     </main>
+
+    <!-- Bundle Generator panel -->
+    <section class="glass panel bundle-panel" id="bundlePanel" style="display:none">
+      <div class="panel__head">
+        <span class="label">Bundle Generator · coffee://bundle</span>
+        <button class="btn mini" id="bundleClose" title="Закрыть">✕</button>
+      </div>
+      <div class="field">
+        <label class="label">WiFi Link <span style="color:var(--danger)">*</span></label>
+        <input class="input" id="bWifi" placeholder="vless:// · hysteria2:// · vmess://…" spellcheck="false" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label class="label">Mobile Link <span style="color:var(--ink-faint)">(необязательно)</span></label>
+        <input class="input" id="bMobile" placeholder="vless:// · другой узел для мобильных" spellcheck="false" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label class="label">Результат</label>
+        <div class="bundle-result" id="bResult">
+          <span class="bundle-result__placeholder">Введите WiFi link чтобы сгенерировать…</span>
+        </div>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:4px">
+        <button class="btn accent" id="bGenerate">GENERATE</button>
+        <button class="btn" id="bCopy" disabled>Копировать</button>
+      </div>
+    </section>
 
     <!-- Create modal -->
     <div class="modal" id="createModal">

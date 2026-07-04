@@ -1,5 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 
+// ── Bundle helpers — coffee://bundle?w=<base64url(wifi)>&m=<base64url(mobile)> ──
+function generateBundle(wifi: string, mobile?: string): string {
+  const encode = (s: string) =>
+    btoa(unescape(encodeURIComponent(s)))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
+  const q = `w=${encode(wifi)}${mobile ? `&m=${encode(mobile)}` : ""}`;
+  return `coffee://bundle?${q}`;
+}
+
 // ── Types (mirror Rust) ──────────────────────────────────────────────────────
 interface Settings {
   host: string;
@@ -54,6 +65,54 @@ function wire() {
     if (settings.host.trim()) closeModal("settingsModal");
   };
   $("setSubmit").onclick = submitSettings;
+  wireBundlePanel();
+}
+
+// ── Bundle panel ──────────────────────────────────────────────────────────────
+function wireBundlePanel() {
+  const panel = $("bundlePanel");
+  const wifiInput = $<HTMLInputElement>("bWifi");
+  const mobileInput = $<HTMLInputElement>("bMobile");
+  const result = $("bResult");
+  const copyBtn = $<HTMLButtonElement>("bCopy");
+
+  $("btnBundle").onclick = () => {
+    panel.style.display = panel.style.display === "none" ? "flex" : "none";
+  };
+  $("bundleClose").onclick = () => { panel.style.display = "none"; };
+
+  const updateResult = () => {
+    const wifi = wifiInput.value.trim();
+    if (!wifi) {
+      result.innerHTML = `<span class="bundle-result__placeholder">Введите WiFi link чтобы сгенерировать…</span>`;
+      copyBtn.disabled = true;
+      return;
+    }
+    const mobile = mobileInput.value.trim() || undefined;
+    const bundle = generateBundle(wifi, mobile);
+    result.textContent = bundle;
+    copyBtn.disabled = false;
+  };
+
+  $("bGenerate").onclick = updateResult;
+  wifiInput.oninput = updateResult;
+  mobileInput.oninput = updateResult;
+
+  copyBtn.onclick = async () => {
+    const text = result.textContent ?? "";
+    if (!text || text.includes("Введите")) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    toast("Bundle скопирован");
+  };
 }
 
 // ── Load + render ─────────────────────────────────────────────────────────────
