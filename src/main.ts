@@ -69,6 +69,16 @@ function wire() {
 }
 
 // ── Bundle panel ──────────────────────────────────────────────────────────────
+function openBundlePanel(prefillWifi?: string) {
+  const panel = $("bundlePanel");
+  if (prefillWifi !== undefined) {
+    ($<HTMLInputElement>("bWifi")).value = prefillWifi;
+  }
+  panel.style.display = "flex";
+  // trigger live update after prefill
+  panel.dispatchEvent(new CustomEvent("bundle:refresh"));
+}
+
 function wireBundlePanel() {
   const panel = $("bundlePanel");
   const wifiInput = $<HTMLInputElement>("bWifi");
@@ -77,11 +87,14 @@ function wireBundlePanel() {
   const copyBtn = $<HTMLButtonElement>("bCopy");
 
   $("btnBundle").onclick = () => {
-    panel.style.display = panel.style.display === "none" ? "flex" : "none";
+    const isOpen = panel.style.display !== "none";
+    panel.style.display = isOpen ? "none" : "flex";
+    if (!isOpen) updateResult();
   };
   $("bundleClose").onclick = () => { panel.style.display = "none"; };
+  panel.addEventListener("bundle:refresh", updateResult);
 
-  const updateResult = () => {
+  function updateResult() {
     const wifi = wifiInput.value.trim();
     if (!wifi) {
       result.innerHTML = `<span class="bundle-result__placeholder">Введите WiFi link чтобы сгенерировать…</span>`;
@@ -92,7 +105,7 @@ function wireBundlePanel() {
     const bundle = generateBundle(wifi, mobile);
     result.textContent = bundle;
     copyBtn.disabled = false;
-  };
+  }
 
   $("bGenerate").onclick = updateResult;
   wifiInput.oninput = updateResult;
@@ -239,8 +252,9 @@ async function submitCreate() {
   try {
     const entry = await invoke<ConfigEntry>("create_config", { name, description, ttlDays });
     closeModal("createModal");
-    await copy(entry.link);
-    toast(`Создан ${entry.name} — ссылка скопирована`);
+    // Open bundle panel pre-filled with the new link so user can add a mobile link
+    openBundlePanel(entry.link);
+    toast(`Создан ${entry.name} — добавь мобильный link и скопируй bundle`);
     loadConfigs();
   } catch (e) {
     $("createErr").textContent = String(e);
