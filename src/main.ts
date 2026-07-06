@@ -34,6 +34,8 @@ interface ServerInfo {
   sni: string;
   obfs: string;
   count: number;
+  vless_port: number; // 0 when x-ui has no VLESS Reality inbound
+  vless_matched: number; // hysteria2 users auto-paired with a per-user VLESS UUID
 }
 interface LoadResult {
   info: ServerInfo;
@@ -150,7 +152,10 @@ async function loadConfigs() {
 }
 
 function render(res: LoadResult) {
-  $("serverPill").textContent = `${res.info.host} · :${res.info.port}`;
+  const vlessTag = res.info.vless_port
+    ? ` · vless :${res.info.vless_port} (${res.info.vless_matched}/${res.info.count})`
+    : "";
+  $("serverPill").textContent = `${res.info.host} · hy2 :${res.info.port}${vlessTag}`;
   $("listLabel").textContent = `Конфиги · ${res.info.count}`;
 
   if (res.entries.length === 0) {

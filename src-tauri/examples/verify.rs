@@ -18,11 +18,25 @@ fn main() {
         ssh_port: env("NF_SSH_PORT", "22").parse().unwrap_or(22),
         sni: env("NF_SNI", "vpn.example.com"),
         key_path: env("NF_KEY", &format!("{home}/.ssh/id_ed25519")),
+        vless_link: String::new(),
     };
 
     println!("→ installed: {:?}", ssh::hysteria_installed(&s));
     let cfg = ssh::read_config(&s).expect("read");
     println!("✓ port={} obfs={} users={:?}", cfg.port, cfg.obfs_type, names(&cfg));
+
+    match ssh::read_vless_inbound(&s) {
+        Ok(Some(vi)) => println!(
+            "✓ vless :{} sni={} sid={} pbk={}… clients={:?}",
+            vi.port,
+            vi.server_name,
+            vi.short_id,
+            vi.public_key.chars().take(8).collect::<String>(),
+            vi.clients.iter().map(|c| c.email.clone()).collect::<Vec<_>>()
+        ),
+        Ok(None) => println!("· vless: x-ui inbound not found"),
+        Err(e) => println!("✗ vless read failed: {e}"),
+    }
 
     const TMP: &str = "nf_rust_tmp";
     if names(&cfg).iter().any(|n| n == TMP) {

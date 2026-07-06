@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 
-use ssh::{Hy2Config, Hy2User};
+use ssh::{Hy2Config, Hy2User, VlessInbound};
 use store::{Meta, Settings};
 
 fn now_ms() -> i64 {
@@ -40,6 +40,10 @@ struct ServerInfo {
     sni: String,
     obfs: String,
     count: usize,
+    /// VLESS Reality port from x-ui, or 0 when no such inbound is present.
+    vless_port: u16,
+    /// How many hysteria2 users were auto-paired with a per-user VLESS UUID.
+    vless_matched: usize,
 }
 
 #[derive(Serialize)]
@@ -70,17 +74,53 @@ fn build_hy2_link(s: &Settings, cfg: &Hy2Config, u: &Hy2User) -> String {
     )
 }
 
-/// If vless_link is configured, wraps hy2 + vless into a coffee://bundle.
-/// Otherwise returns the plain hysteria2 link.
-fn build_link(s: &Settings, cfg: &Hy2Config, u: &Hy2User) -> String {
-    let hy2 = build_hy2_link(s, cfg, u);
-    let vless = s.vless_link.trim();
-    if vless.is_empty() {
-        return hy2;
+/// Build the per-user VLESS Reality link from the x-ui inbound + this user's UUID.
+fn build_vless_link(host: &str, vi: &VlessInbound, uuid: &str, name: &str) -> String {
+    format!(
+        "vless://{uuid}@{host}:{port}?type=tcp&security=reality&flow={flow}&pbk={pbk}&fp=chrome&sni={sni}&sid={sid}#{name}-vless",
+        uuid = uuid,
+        host = host,
+        port = vi.port,
+        flow = vi.flow,
+        pbk = vi.public_key,
+        sni = vi.server_name,
+        sid = vi.short_id,
+        name = name,
+    )
+}
+
+/// Resolve the mobile (VLESS) leg for a hysteria2 user:
+///  1. per-user VLESS from x-ui, matched to the user by name (case-insensitive);
+///  2. otherwise the static `vless_link` from settings as a manual fallback.
+fn mobile_leg(s: &Settings, u: &Hy2User, vless: Option<&VlessInbound>) -> Option<String> {
+    if let Some(vi) = vless {
+        if !vi.public_key.is_empty() {
+            if let Some(c) = vi.clients.iter().find(|c| c.email.eq_ignore_ascii_case(&u.name)) {
+                return Some(build_vless_link(&s.host, vi, &c.uuid, &u.name));
+            }
+        }
     }
-    let w = URL_SAFE_NO_PAD.encode(hy2.as_bytes());
-    let m = URL_SAFE_NO_PAD.encode(vless.as_bytes());
-    format!("coffee://bundle?w={}&m={}", w, m)
+    let manual = s.vless_link.trim();
+    if manual.is_empty() {
+        None
+    } else {
+        Some(manual.to_string())
+    }
+}
+
+/// hysteria2 is the WiFi leg (`w=`); VLESS the mobile leg (`m=`). When a mobile
+/// leg exists we emit a coffee://bundle so the client auto-switches by network;
+/// otherwise a plain hysteria2 link.
+fn build_link(s: &Settings, cfg: &Hy2Config, u: &Hy2User, vless: Option<&VlessInbound>) -> String {
+    let hy2 = build_hy2_link(s, cfg, u);
+    match mobile_leg(s, u, vless) {
+        Some(vless_link) => {
+            let w = URL_SAFE_NO_PAD.encode(hy2.as_bytes());
+            let m = URL_SAFE_NO_PAD.encode(vless_link.as_bytes());
+            format!("coffee://bundle?w={}&m={}", w, m)
+        }
+        None => hy2,
+    }
 }
 
 // ── Commands ────────────────────────────────────────────────────────────────
@@ -112,6 +152,8 @@ fn load_configs(app: AppHandle) -> Result<LoadResult, String> {
 
     let mut meta = store::load_meta(&dir);
     let mut cfg = ssh::read_config(&settings)?;
+    // VLESS is an optional add-on: failing to read it must not break the list.
+    let vless = ssh::read_vless_inbound(&settings).unwrap_or(None);
     let now = now_ms();
 
     let expired: Vec<String> = cfg
@@ -135,14 +177,14 @@ fn load_configs(app: AppHandle) -> Result<LoadResult, String> {
         cfg = ssh::read_config(&settings)?;
     }
 
-    let entries = cfg
+    let entries: Vec<ConfigEntry> = cfg
         .users
         .iter()
         .map(|u| {
             let m = meta.get(&u.name).cloned().unwrap_or_default();
             ConfigEntry {
                 name: u.name.clone(),
-                link: build_link(&settings, &cfg, u),
+                link: build_link(&settings, &cfg, u, vless.as_ref()),
                 description: m.description,
                 created_ms: m.created_ms,
                 expires_ms: m.expires_ms,
@@ -151,6 +193,16 @@ fn load_configs(app: AppHandle) -> Result<LoadResult, String> {
         })
         .collect();
 
+    let vless_matched = vless
+        .as_ref()
+        .map(|vi| {
+            cfg.users
+                .iter()
+                .filter(|u| vi.clients.iter().any(|c| c.email.eq_ignore_ascii_case(&u.name)))
+                .count()
+        })
+        .unwrap_or(0);
+
     Ok(LoadResult {
         info: ServerInfo {
             host: settings.host.clone(),
@@ -158,6 +210,8 @@ fn load_configs(app: AppHandle) -> Result<LoadResult, String> {
             sni: effective_sni(&settings),
             obfs: cfg.obfs_type.clone(),
             count: cfg.users.len(),
+            vless_port: vless.as_ref().map(|vi| vi.port).unwrap_or(0),
+            vless_matched,
         },
         entries,
     })
@@ -186,6 +240,14 @@ fn create_config(
     let settings = store::load_settings(&dir);
     let password = random_password(16);
     ssh::add_user(&settings, &name, &password)?;
+    // Also provision a per-user VLESS client in x-ui so the bundle's mobile leg
+    // works immediately. No-op when x-ui is absent; on failure roll back the
+    // hysteria2 user so we don't leave a half-created config.
+    let vless_uuid = uuid_v4();
+    if let Err(e) = ssh::add_vless_client(&settings, &name, &vless_uuid) {
+        let _ = ssh::remove_user(&settings, &name);
+        return Err(format!("VLESS-клиент в x-ui не создан: {e}"));
+    }
 
     let now = now_ms();
     let expires_ms = if ttl_days > 0 {
@@ -206,12 +268,13 @@ fn create_config(
     store::save_meta(&dir, &meta)?;
 
     let cfg = ssh::read_config(&settings)?;
+    let vless = ssh::read_vless_inbound(&settings).unwrap_or(None);
     let user = Hy2User {
         name: name.clone(),
         password,
     };
     Ok(ConfigEntry {
-        link: build_link(&settings, &cfg, &user),
+        link: build_link(&settings, &cfg, &user, vless.as_ref()),
         name,
         description: description.trim().to_string(),
         created_ms: now,
@@ -225,9 +288,23 @@ fn delete_config(app: AppHandle, name: String) -> Result<(), String> {
     let dir = data_dir(&app)?;
     let settings = store::load_settings(&dir);
     ssh::remove_user(&settings, &name)?;
+    // Best-effort: also drop the paired VLESS client from x-ui.
+    let _ = ssh::remove_vless_client(&settings, &name);
     let mut meta = store::load_meta(&dir);
     meta.remove(&name);
     store::save_meta(&dir, &meta)
+}
+
+/// Random UUIDv4 for a new VLESS client (RFC 4122 variant/version bits set).
+fn uuid_v4() -> String {
+    let mut b = [0u8; 16];
+    getrandom::getrandom(&mut b).expect("OS RNG unavailable");
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    format!(
+        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]
+    )
 }
 
 fn random_password(len: usize) -> String {

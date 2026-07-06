@@ -17,8 +17,10 @@ pub struct Settings {
     pub sni: String,
     /// Optional explicit private key path; empty → use ssh defaults.
     pub key_path: String,
-    /// Optional VLESS Reality link used as the mobile leg of coffee://bundle.
-    /// When set, every generated hysteria2 link is automatically wrapped in a bundle.
+    /// Fallback VLESS Reality link for the mobile leg of coffee://bundle.
+    /// Normally the per-user VLESS link is read straight from the x-ui inbound
+    /// (matched to the hysteria2 user by name); this static link is only used
+    /// for users with no matching x-ui client, or when x-ui is unreachable.
     #[serde(default)]
     pub vless_link: String,
 }
