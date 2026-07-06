@@ -251,6 +251,85 @@ pub fn read_vless_inbound(s: &Settings) -> Result<Option<VlessInbound>, String> 
     Ok(Some(vi))
 }
 
+/// Python run on the server to add/remove a VLESS client in every REALITY
+/// inbound of the x-ui DB. Backs the DB up first and is idempotent (keyed by
+/// email). argv: `<add|remove> <name> [uuid]`.
+const NF_VLESS_PY: &str = r#"
+import sqlite3, json, sys, time, shutil
+DB = '/etc/x-ui/x-ui.db'
+op = sys.argv[1]
+name = sys.argv[2]
+uuid = sys.argv[3] if len(sys.argv) > 3 else ''
+shutil.copy(DB, DB + '.bak-' + str(int(time.time())))
+db = sqlite3.connect(DB)
+changed = 0
+for iid, ss, st in db.execute("select id,stream_settings,settings from inbounds where protocol='vless'").fetchall():
+    try:
+        stream = json.loads(ss or '{}')
+    except Exception:
+        continue
+    if stream.get('security') != 'reality':
+        continue
+    try:
+        cfg = json.loads(st or '{}')
+    except Exception:
+        cfg = {}
+    clients = cfg.get('clients') or []
+    has = any(str(c.get('email', '')).lower() == name.lower() for c in clients)
+    if op == 'add':
+        if has:
+            continue
+        clients.append({'id': uuid, 'flow': 'xtls-rprx-vision', 'email': name,
+                        'enable': True, 'totalGB': 0, 'expiryTime': 0, 'limitIp': 0,
+                        'tgId': '', 'subId': '', 'reset': 0})
+    elif op == 'remove':
+        if not has:
+            continue
+        clients = [c for c in clients if str(c.get('email', '')).lower() != name.lower()]
+    else:
+        print('BADOP')
+        sys.exit(2)
+    cfg['clients'] = clients
+    db.execute("update inbounds set settings=? where id=?", (json.dumps(cfg), iid))
+    changed += 1
+db.commit()
+print('CHANGED', changed)
+"#;
+
+/// Add or remove a per-user VLESS client across the x-ui REALITY inbounds, then
+/// reload x-ui so xray regenerates its config. No-op when x-ui is absent.
+fn vless_client_op(s: &Settings, op: &str, name: &str, uuid: &str) -> Result<(), String> {
+    let exists = run(s, &format!("test -f {XUI_CONFIG} && echo OK || echo NO"))?;
+    if exists.trim() != "OK" {
+        return Ok(()); // no x-ui on this host → nothing to manage
+    }
+    write_file(s, "/tmp/nf_vless.py", NF_VLESS_PY)?;
+    let out = run(
+        s,
+        &format!("python3 /tmp/nf_vless.py {op} {name} {uuid}; rm -f /tmp/nf_vless.py"),
+    )?;
+    if !out.contains("CHANGED") {
+        return Err(format!("x-ui vless {op}: неожиданный ответ: {}", out.trim()));
+    }
+    // Restart so x-ui rebuilds bin/config.json from the DB; give it a moment.
+    run(
+        s,
+        "x-ui restart >/dev/null 2>&1 || systemctl restart x-ui >/dev/null 2>&1 || true; sleep 3",
+    )?;
+    Ok(())
+}
+
+/// Create a per-user VLESS Reality client (same UUID reused as its `email`
+/// == `name`) in x-ui, so the mobile leg of the bundle works out of the box.
+pub fn add_vless_client(s: &Settings, name: &str, uuid: &str) -> Result<(), String> {
+    vless_client_op(s, "add", name, uuid)
+}
+
+/// Remove the per-user VLESS client (mirror of [`add_vless_client`]).
+pub fn remove_vless_client(s: &Settings, name: &str) -> Result<(), String> {
+    vless_client_op(s, "remove", name, "")
+}
+
 pub fn add_user(s: &Settings, name: &str, password: &str) -> Result<(), String> {
     let text = run(s, &format!("cat {HY_CONFIG}"))?;
     let cfg = parse_config(&text);

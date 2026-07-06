@@ -47,12 +47,14 @@
   запуске** приложения.
 - 📎 **Копировать / удалить** прямо из списка (удаление — двойным кликом).
 - 🔀 **coffee://bundle (hysteria2 + VLESS)** — если на том же сервере стоит x-ui
-  с VLESS Reality инбаундом, NetForge читает его и на каждого пользователя
-  собирает бандл `coffee://bundle?w=<hysteria2>&m=<vless>`. Клиент coffeeNetwork
+  с VLESS Reality инбаундом, при **создании** конфига NetForge заводит юзеру и
+  hysteria2-аккаунт, и персональный VLESS-клиент (новый UUID) в x-ui, а затем
+  выдаёт бандл `coffee://bundle?w=<hysteria2>&m=<vless>`. Клиент coffeeNetwork
   сам выбирает плечо по сети: **WiFi → hysteria2** (`w`), **мобильный → VLESS**
-  (`m`, устойчив к DPI). VLESS-UUID подбирается к hysteria2-юзеру по имени
-  (email в инбаунде); pbk выводится из privateKey через `xray x25519`. Для
-  юзеров без пары в x-ui используется статичный VLESS-link из настроек (fallback).
+  (`m`, устойчив к DPI). Существующие юзеры подбираются к VLESS по имени
+  (email в инбаунде); pbk выводится из privateKey через `xray x25519`. Правки
+  x-ui идут через БД с автобэкапом; для хостов без x-ui берётся статичный
+  VLESS-link из настроек (fallback), либо выдаётся чистый hysteria2.
 
 ## Как это работает
 

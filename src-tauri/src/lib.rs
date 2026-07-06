@@ -240,6 +240,14 @@ fn create_config(
     let settings = store::load_settings(&dir);
     let password = random_password(16);
     ssh::add_user(&settings, &name, &password)?;
+    // Also provision a per-user VLESS client in x-ui so the bundle's mobile leg
+    // works immediately. No-op when x-ui is absent; on failure roll back the
+    // hysteria2 user so we don't leave a half-created config.
+    let vless_uuid = uuid_v4();
+    if let Err(e) = ssh::add_vless_client(&settings, &name, &vless_uuid) {
+        let _ = ssh::remove_user(&settings, &name);
+        return Err(format!("VLESS-клиент в x-ui не создан: {e}"));
+    }
 
     let now = now_ms();
     let expires_ms = if ttl_days > 0 {
@@ -280,9 +288,23 @@ fn delete_config(app: AppHandle, name: String) -> Result<(), String> {
     let dir = data_dir(&app)?;
     let settings = store::load_settings(&dir);
     ssh::remove_user(&settings, &name)?;
+    // Best-effort: also drop the paired VLESS client from x-ui.
+    let _ = ssh::remove_vless_client(&settings, &name);
     let mut meta = store::load_meta(&dir);
     meta.remove(&name);
     store::save_meta(&dir, &meta)
+}
+
+/// Random UUIDv4 for a new VLESS client (RFC 4122 variant/version bits set).
+fn uuid_v4() -> String {
+    let mut b = [0u8; 16];
+    getrandom::getrandom(&mut b).expect("OS RNG unavailable");
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    format!(
+        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]
+    )
 }
 
 fn random_password(len: usize) -> String {
