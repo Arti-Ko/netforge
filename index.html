@@ -111,8 +111,8 @@
           <input class="input" id="sKey" placeholder="~/.ssh/id_ed25519 (пусто = по умолчанию)" autocomplete="off" />
         </div>
         <div class="field">
-          <label class="label">VLESS Reality link <span style="color:var(--ink-faint)">(авто-bundle для мобильных)</span></label>
-          <input class="input" id="sVless" placeholder="vless://uuid@host:443?type=tcp&security=reality&pbk=…" spellcheck="false" autocomplete="off" />
+          <label class="label">VLESS Reality link <span style="color:var(--ink-faint)">(fallback; per-user vless тянется из x-ui автоматически)</span></label>
+          <input class="input" id="sVless" placeholder="vless://uuid@host:443?...  — только если x-ui недоступен" spellcheck="false" autocomplete="off" />
         </div>
         <div class="modal__actions">
           <button class="btn" id="setCancel">Отмена</button>
